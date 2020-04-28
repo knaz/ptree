@@ -1,0 +1,46 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+my @processes = split /\n/, `ps -df`;
+
+my $header = shift @processes;
+my $CMD = $header =~ s/^(.*?)\bCMD\b.*/'.' x length $1/re;
+
+@processes =
+    map {
+        /^\s*(\d+)\s+(\d+)\s+(\d+)/ or die "Unable to parse ps output ($_)";
+        my $pid  = $2;
+        my $ppid = $3;
+        my $cmd  = /^$CMD(.*)/ ? $1 : '';
+        +{
+            pid => $pid,
+            ppid => $ppid,
+            cmd => substr($cmd, 0, 80),
+        }
+    } @processes;
+
+my %by_parent = map { $_->{ppid} => $_ } @processes;
+my %by_pid    = map { $_->{pid}  => $_ } @processes;
+
+my @ppids = sort keys %by_parent;
+
+for my $process (@processes) {
+    $by_pid{$process->{ppid}} //= { pid => $process->{ppid}, cmd => '??', children => [] };
+
+    push @{$by_pid{$process->{ppid}}{children}}, $process;
+
+    $process->{is_a_child}++;
+}
+
+my @not_children = sort { $a->{pid} <=> $b->{pid} } grep { !$_->{is_a_child} } values %by_pid;
+
+render($_, '') for @not_children;
+
+sub render {
+    my ($process, $indentation) = @_;
+
+    print "$indentation$process->{pid}".($process->{cmd} ? " $process->{cmd}" : "")."\n";
+    render($_, "$indentation    ") for @{$process->{children}//[]};
+}
