@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-my @processes = split /\n/, `ps -df`;
+my @processes = split /\n/, `ps -xf`;
 
 my $header = shift @processes;
 my $CMD = $header =~ s/^(.*?)\bCMD\b.*/'.' x length $1/re;
