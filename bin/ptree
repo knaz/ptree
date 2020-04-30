@@ -41,26 +41,24 @@ if (@ARGV) {
     }
 
     for my $wanted (@ARGV) {
-        my @to_delete;
         for my $process (values %by_pid) {
             next if $process->{ancestors}{$wanted};
             next if $process->{descendants}{$wanted};
             next if $process->{pid} == $wanted;
-            push @to_delete, $process->{pid};
+            $process->{omit}++;
         }
-        delete $by_pid{$_} for @to_delete;
     }
 }
 
 my @not_children = sort { $a->{pid} <=> $b->{pid} } grep { !$_->{is_a_child} } values %by_pid;
 
-render($_, '') for @not_children;
+render($_, '') for grep { !$_->{omit} } @not_children;
 
 sub render {
     my ($process, $indentation) = @_;
 
     print "$indentation$process->{pid}".($process->{cmd} ? " $process->{cmd}" : "")."\n";
-    render($_, "$indentation    ") for @{$process->{children}//[]};
+    render($_, "$indentation    ") for grep { !$_->{omit} } @{$process->{children}//[]};
 }
 
 sub find_descendants {
