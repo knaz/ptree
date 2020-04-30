@@ -21,10 +21,7 @@ my $CMD = $header =~ s/^(.*?)\bCMD\b.*/'.' x length $1/re;
         }
     } @processes;
 
-my %by_parent = map { $_->{ppid} => $_ } @processes;
-my %by_pid    = map { $_->{pid}  => $_ } @processes;
-
-my @ppids = sort keys %by_parent;
+my %by_pid = map { $_->{pid}  => $_ } @processes;
 
 for my $process (@processes) {
     $by_pid{$process->{ppid}} //= { pid => $process->{ppid}, cmd => '??', children => [] };
@@ -32,6 +29,27 @@ for my $process (@processes) {
     push @{$by_pid{$process->{ppid}}{children}}, $process;
 
     $process->{is_a_child}++;
+}
+
+if (@ARGV) {
+    for my $process (values %by_pid) {
+        $process->{descendants} = +{ map { $_->{pid} => 1 } find_descendants($process) };
+    }
+
+    for my $process (values %by_pid) {
+        $process->{ancestors} = +{ map { $_->{pid} => 1 } grep { $_->{descendants}{$process->{pid}} } values %by_pid };
+    }
+
+    for my $wanted (@ARGV) {
+        my @to_delete;
+        for my $process (values %by_pid) {
+            next if $process->{ancestors}{$wanted};
+            next if $process->{descendants}{$wanted};
+            next if $process->{pid} == $wanted;
+            push @to_delete, $process->{pid};
+        }
+        delete $by_pid{$_} for @to_delete;
+    }
 }
 
 my @not_children = sort { $a->{pid} <=> $b->{pid} } grep { !$_->{is_a_child} } values %by_pid;
@@ -43,4 +61,9 @@ sub render {
 
     print "$indentation$process->{pid}".($process->{cmd} ? " $process->{cmd}" : "")."\n";
     render($_, "$indentation    ") for @{$process->{children}//[]};
+}
+
+sub find_descendants {
+    @{$_[0]{children}//[]},
+    map { find_descendants($_) } @{$_[0]{children}//[]},
 }
